@@ -1,0 +1,24 @@
+post_install() {
+  cat <<'MSG'
+==> meeting-notify installed. One-time per-user setup:
+
+  1. Create a free Google OAuth credential (it's not shippable):
+       https://console.cloud.google.com/  -> new project
+       -> enable "Google Calendar API"
+       -> OAuth consent screen (Internal if you have Workspace, else External
+          + add yourself as a Test user)
+       -> Credentials -> OAuth client ID -> "Desktop app" -> download the JSON.
+     Save that JSON as:  ~/.config/meeting-notify/client_secret.json
+  2. Sign in:   meeting-notify-reauth
+  3. Enable:    systemctl --user enable --now meeting-notify.timer
+                systemctl --user enable meeting-notify-authcheck.service
+  4. Optional:  cp /usr/share/meeting-notify/config.example.ini \
+                   ~/.config/meeting-notify/config.ini   # then edit to taste
+
+Reminders fire from each event's own notifications in Google Calendar.
+MSG
+}
+
+post_upgrade() {
+  echo "==> meeting-notify upgraded. If it's running:  systemctl --user restart meeting-notify.timer"
+}

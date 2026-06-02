@@ -1,0 +1,83 @@
+# Maintainer: Ionut R. <33980111+d-packs@users.noreply.github.com>
+pkgname=meeting-notify-git
+_name=meeting-notify
+pkgver=0.r0.0000000
+pkgrel=1
+pkgdesc='Desktop notifications for Google Calendar meetings via a systemd --user timer'
+arch=('any')
+url='https://github.com/d-packs/meeting-notify'
+license=('GPL-3.0-or-later' 'LGPL-2.0-or-later')
+depends=('python' 'python-google-api-python-client' 'python-google-auth'
+         'python-google-auth-oauthlib' 'python-cryptography' 'python-gobject'
+         'libnotify' 'xdg-utils' 'libpulse')
+makedepends=('git')
+optdepends=('chromium: open meeting links in a Google Meet PWA instead of a browser')
+provides=("$_name")
+conflicts=("$_name")
+source=("git+$url.git")
+sha256sums=('SKIP')
+install="$_name.install"
+
+pkgver() {
+  cd "$srcdir/$_name"
+  printf 'r%s.%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+package() {
+  cd "$srcdir/$_name"
+  local dest="$pkgdir/usr/share/$_name"
+
+  # Application files (scripts resolve sounds/siblings relative to themselves).
+  install -dm755 "$dest/sounds"
+  install -m755 meeting-notify.py meeting-notify-popup.py meeting-notify-reauth.py "$dest/"
+  install -m644 sounds/*.ogg "$dest/sounds/"
+  install -m644 config.example.ini "$dest/"
+  # Dependencies are packaged system-wide, so run on the system interpreter.
+  sed -i '1s|^#!.*|#!/usr/bin/python3|' "$dest"/*.py
+
+  # User-facing commands.
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s "/usr/share/$_name/meeting-notify.py"        "$pkgdir/usr/bin/meeting-notify"
+  ln -s "/usr/share/$_name/meeting-notify-reauth.py" "$pkgdir/usr/bin/meeting-notify-reauth"
+
+  # systemd --user units (each user enables them; config/token stay per-user).
+  install -dm755 "$pkgdir/usr/lib/systemd/user"
+  cat > "$pkgdir/usr/lib/systemd/user/meeting-notify.service" <<'EOF'
+[Unit]
+Description=Notify of upcoming Google Calendar meetings
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/share/meeting-notify/meeting-notify.py
+EOF
+  cat > "$pkgdir/usr/lib/systemd/user/meeting-notify.timer" <<'EOF'
+[Unit]
+Description=Check Google Calendar for upcoming meetings every minute
+
+[Timer]
+OnCalendar=*:*:00
+Persistent=true
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
+EOF
+  cat > "$pkgdir/usr/lib/systemd/user/meeting-notify-authcheck.service" <<'EOF'
+[Unit]
+Description=Re-check Google Calendar sign-in at login (re-nag if broken)
+After=graphical-session.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/share/meeting-notify/meeting-notify.py --auth-check
+
+[Install]
+WantedBy=default.target
+EOF
+
+  # Docs + licenses.
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$_name/README.md"
+  install -Dm644 sounds/CREDITS.md "$pkgdir/usr/share/doc/$_name/sounds-CREDITS.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 sounds/LICENSE.LGPL-2.0 "$pkgdir/usr/share/licenses/$pkgname/LICENSE.LGPL-2.0"
+}
